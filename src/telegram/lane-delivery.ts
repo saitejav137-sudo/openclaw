@@ -328,6 +328,19 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
       !hasMedia && text.length > 0 && text.length <= params.draftMaxChars && !payload.isError;
 
     if (infoKind === "final") {
+      // For DM draft mode (sendMessageDraft), the draft bubble auto-converts to final message.
+      // We only need to flush the draft and mark as delivered, no separate sendPayload needed.
+      // Check if we're in draft preview mode and have already streamed content.
+      if (isDraftPreviewLane(lane) && lane.hasStreamedMessage) {
+        // Flush any pending draft updates and stop the stream.
+        lane.stream?.update(text);
+        await params.flushDraftLane(lane);
+        await params.stopDraftLane(lane);
+        lane.lastPartialText = text;
+        params.markDelivered();
+        return "preview-finalized";
+      }
+
       if (laneName === "answer") {
         const archivedResult = await consumeArchivedAnswerPreviewForFinal({
           lane,
